@@ -13,6 +13,20 @@ import {
 import { MessageCircleIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
+// Mapping label bahasa Inggris -> Indonesia
+const emotionTranslations: Record<string, string> = {
+  joy: "Senang",
+  trust: "Percaya",
+  surprise: "Terkejut",
+  neutral: "Netral",
+  fear: "Takut",
+  sadness: "Sedih",
+  anger: "Marah",
+  happy: "Senang",
+  love: "Cinta",
+  unknown: "Tidak diketahui",
+};
+
 type Komentar = {
   id: number;
   text: string;
@@ -22,38 +36,57 @@ type Komentar = {
 export default function Home() {
   const [komentar, setKomentar] = useState("");
   const [daftarKomentar, setDaftarKomentar] = useState<Komentar[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const deteksiEmosi = (teks: string): string => {
-    const lower = teks.toLowerCase();
-    if (lower.includes("marah") || lower.includes("kesal")) return "Anger";
-    if (lower.includes("senang") || lower.includes("bagus")) return "Happy";
-    if (lower.includes("sedih") || lower.includes("kecewa")) return "Sadness";
-    if (lower.includes("sayang") || lower.includes("cinta")) return "Love";
-    return "Neutral";
-  };
-
-  const handleKomentarSubmit = (e: React.FormEvent) => {
+  const handleKomentarSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (komentar.trim() !== "") {
-      const emotion = deteksiEmosi(komentar);
+
+    if (komentar.trim() === "") return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const res = await fetch("http://127.0.0.1:5001/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: komentar }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Terjadi kesalahan saat prediksi");
+        return;
+      }
+
+      const originalEmotion = data.emotion || "unknown";
+      const translatedEmotion =
+        emotionTranslations[originalEmotion.toLowerCase()] || originalEmotion;
+
       setDaftarKomentar((prev) => [
-        { id: Date.now(), text: komentar, emotion }, // 👈 Tambah ke atas
+        { id: Date.now(), text: komentar, emotion: translatedEmotion },
         ...prev,
       ]);
+
       setKomentar("");
+    } catch (err: any) {
+      setError("Gagal menghubungi server.");
+    } finally {
+      setLoading(false);
     }
   };
+
   const handleHapusKomentar = (id: number) => {
     setDaftarKomentar((prev) => prev.filter((komentar) => komentar.id !== id));
   };
 
   return (
-    <div className="flex flex-col items-center justify-center my-[15%] bg-white dark:bg-black ">
-      <div>
-        <h1 className="text-3xl font-bold mb-8 text-center ">
-          Selamat Datang!
-        </h1>
-        <p className="text-2xl font-bold mb-8 text-center">
+    <div className="flex flex-col items-center justify-center my-[10%] bg-white dark:bg-black">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-4">Selamat Datang!</h1>
+        <p className="text-xl font-medium">
           Silahkan Masukkan Komentar Anda Terkait Tunjangan Kinerja Dosen ASN!
         </p>
       </div>
@@ -64,13 +97,19 @@ export default function Home() {
       >
         <Input
           type="text"
-          placeholder="Tulis komentar "
+          placeholder="Tulis komentar"
           className="flex-1"
           value={komentar}
           onChange={(e) => setKomentar(e.target.value)}
         />
-        <Button type="submit">Deteksi</Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? "Mendeteksi..." : "Deteksi"}
+        </Button>
       </form>
+
+      {error && (
+        <p className="text-red-600 text-sm mb-4 text-center">{error}</p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full max-w-6xl px-4 items-start">
         {daftarKomentar.map((komentar) => (
@@ -78,7 +117,7 @@ export default function Home() {
             key={komentar.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 0.6 }}
           >
             <Card className="@container/card">
               <CardHeader className="relative">
@@ -86,7 +125,8 @@ export default function Home() {
                 <CardTitle className="text-lg">{komentar.text}</CardTitle>
                 {komentar.emotion && (
                   <p className="text-sm mt-1 text-muted-foreground">
-                    Emosi terdeteksi: <strong>{komentar.emotion}</strong>
+                    Emosi terdeteksi:{" "}
+                    <strong className="capitalize">{komentar.emotion}</strong>
                   </p>
                 )}
                 <div className="absolute right-4 top-4 text-muted-foreground">
